@@ -71,7 +71,8 @@ interpret (char* input)
 	else if (strcmp(args[0], "\n") == 0)
 		return 0;
 	else
-		return 0;//popen(args[0], "r");//return 0; // TODO call the named program here
+		return 0;//popen(args[0], "r");//return 0;
+		// TODO call the named program here - if there isn't a binary called like the named program print cnf
 	
 	return 0;
 }
@@ -88,9 +89,10 @@ cd (char* path)
 		int errcode = errno;
 		char buffer[300];
 		if (errcode == ENOENT) {
-			strcpy(buffer, path);
+			/*strcpy(buffer, path);
 			strcat(buffer, " is not a directory\n");
-			printf(buffer);
+			printf(buffer);*/
+			puts("no such file or directory");
 		}
 	}
 }
