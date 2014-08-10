@@ -5,11 +5,13 @@
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
+#include <time.h>
 
 char *get_current_dir_name(void);
 int interpret (char* input);
 void cd (char* path);
 void ls (void);
+void date (void);
 //int chararray_sizeof (char* arr);
 void removeNL(char* string);
 
@@ -65,7 +67,9 @@ interpret (char* input)
 	else if (strcmp(args[0], "ls") == 0)
 		ls();
 	else if (strcmp(args[0], "date") == 0)
-		printf("date");//date();
+		date();
+	else if (strcmp(args[0], "echo") == 0)
+		puts("echo");//echo(args);
 	else if (strcmp(args[0], "exit") == 0)
 		return 1;
 	else if (strcmp(args[0], "\n") == 0)
@@ -87,7 +91,7 @@ cd (char* path)
 	returncode = chdir(path);
 	if (returncode == -1) {
 		int errcode = errno;
-		char buffer[300];
+		//char buffer[300];
 		if (errcode == ENOENT) {
 			/*strcpy(buffer, path);
 			strcat(buffer, " is not a directory\n");
@@ -111,6 +115,19 @@ ls (void)
 				printf ("%s\n", ent->d_name);
 		}
 	closedir (dir);
+	}
+}
+
+void
+date (void)
+{
+	time_t t = time(NULL);
+	gmtime(&t);
+	struct tm *currenttm = localtime(&t);
+	if (currenttm == NULL) {
+		printf("Error in date() function, tmptr is NULL");
+	} else {
+		printf(asctime(currenttm));
 	}
 }
 
