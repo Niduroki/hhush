@@ -12,6 +12,7 @@ int interpret (char* input);
 void cd (char* path);
 void ls (void);
 void date (void);
+void echo (char* args);
 //int chararray_sizeof (char* arr);
 void removeNL(char* string);
 
@@ -24,8 +25,10 @@ main()
 		printf(" $ ");
 		char input[256];
 		fgets(input, sizeof(input), stdin);
+		// TODO save the history into an array/struct here
 		int returncode = interpret(input);
 		if (returncode == 1) {
+			// We're supposed to exit, save the history
 			return 0;
 		}
 	}
@@ -68,8 +71,12 @@ interpret (char* input)
 		ls();
 	else if (strcmp(args[0], "date") == 0)
 		date();
+	else if (strcmp(args[0], "grep") == 0)
+		puts("grep something here")
 	else if (strcmp(args[0], "echo") == 0)
-		puts("echo");//echo(args);
+		echo(args[]);
+	else if (strcmp(args[0], "history") == 0)
+		puts("Print history here")
 	else if (strcmp(args[0], "exit") == 0)
 		return 1;
 	else if (strcmp(args[0], "\n") == 0)
@@ -85,7 +92,6 @@ interpret (char* input)
 void
 cd (char* path)
 {
-	// TODO paths like /usr/bin fail
 	int returncode;
 	removeNL(path);
 	returncode = chdir(path);
@@ -131,6 +137,20 @@ date (void)
 	}
 }
 
+void
+echo (char* args)
+{
+	int i;
+	//printf(args);
+	for (i=1; i<127; i++) {
+		printf(args[i]);
+	}
+}
+
+/**
+ * Replaces a newline in a string/char array with a string terminating \0
+ * Necessary, because splitting inserts a \n for whatever reason
+ */
 void
 removeNL(char* string)
 {
