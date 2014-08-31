@@ -12,17 +12,19 @@ int interpret (char* input);
 void cd (char* path);
 void ls (void);
 void date (void);
-void echo (char* args);
+void echo (char args[][256]);
+void grep (char args[][256]);
+void history (char* arg);
 //int chararray_sizeof (char* arr);
 void removeNL(char* string);
+int string_to_int(char* string);
 
 int
 main()
 {
 	int run = 1;
 	while (run) {
-		printf(get_current_dir_name());
-		printf(" $ ");
+		printf("%s $ ", get_current_dir_name());
 		char input[256];
 		fgets(input, sizeof(input), stdin);
 		// TODO save the history into an array/struct here
@@ -72,11 +74,11 @@ interpret (char* input)
 	else if (strcmp(args[0], "date") == 0)
 		date();
 	else if (strcmp(args[0], "grep") == 0)
-		puts("grep something here")
+		grep(args);
 	else if (strcmp(args[0], "echo") == 0)
-		echo(args[]);
+		echo(args);
 	else if (strcmp(args[0], "history") == 0)
-		puts("Print history here")
+		puts("Print history here");
 	else if (strcmp(args[0], "exit") == 0)
 		return 1;
 	else if (strcmp(args[0], "\n") == 0)
@@ -138,13 +140,21 @@ date (void)
 }
 
 void
-echo (char* args)
+echo (char args[][256])
 {
-	int i;
-	//printf(args);
-	for (i=1; i<127; i++) {
-		printf(args[i]);
+	int i = 1;
+	// If args[i][0] == 0 there's no more text to be echoed
+	while (args[i][0] != 0) {
+		printf("%s ", args[i]);
+		i++;
 	}
+	printf("\n");
+}
+
+void
+grep (char args[][256])
+{
+	printf("Search %s for %s", args[2], args[1]);
 }
 
 /**
@@ -164,4 +174,10 @@ removeNL(char* string)
 		
 		i++;
 	}
+}
+
+int
+string_to_int (char* string)
+{
+	return 1;
 }
