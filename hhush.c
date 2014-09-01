@@ -6,12 +6,16 @@
 #include <signal.h>
 #include <string.h>
 #include <time.h>
+#include <stdlib.h>
+
+#define ARGSNUMBER 128
+#define ARGSLENGTH 256
 
 char *get_current_dir_name(void);
 int interpret (char* input);
 void cd (char* path);
-void ls (void);
-void date (void);
+void ls (char args[][256]);
+void date (char args[][256]);
 void echo (char args[][256]);
 void grep (char args[][256]);
 void history (char* arg);
@@ -43,7 +47,18 @@ main()
 int
 interpret (char* input)
 {
-	char args[128][256];
+	char* args = malloc(ARGSNUMBER*ARGSLENGTH*sizeof(char));
+	if (args == NULL) {
+		puts("ERROR: Couldn't allocate memory!");
+		return 1;
+	}
+	//char args[128][256];
+	
+	// Clean input
+	int j;
+	for (j=0; j<128; j++) {
+		*(args+sizeof(char)*j) = '\0';
+	}
 	
 
 	/* Split input */
@@ -70,9 +85,9 @@ interpret (char* input)
 	if (strcmp(args[0], "cd") == 0)
 		cd(args[1]);
 	else if (strcmp(args[0], "ls") == 0)
-		ls();
+		ls(args);
 	else if (strcmp(args[0], "date") == 0)
-		date();
+		date(args);
 	else if (strcmp(args[0], "grep") == 0)
 		grep(args);
 	else if (strcmp(args[0], "echo") == 0)
@@ -86,6 +101,13 @@ interpret (char* input)
 	else
 		return 0;//popen(args[0], "r");//return 0;
 		// TODO call the named program here - if there isn't a binary called like the named program print cnf
+	
+	// clean up
+	int k;
+	for (k=0; k<128; k++) {
+		free(args[k]);
+	}
+	//free(*args);
 	
 	return 0;
 }
@@ -110,8 +132,14 @@ cd (char* path)
 }
 
 void
-ls (void)
+ls (char args[][256])
 {
+	// Check whether we got some arguments we shouldn't get
+	if (args[1][0] != 0) {
+		puts("invalid arguments");
+		return;
+	}
+	
 	// TODO understand this :|
 	// https://stackoverflow.com/questions/612097/how-can-i-get-a-list-of-files-in-a-directory-using-c-or-c
 	DIR *dir;
@@ -127,8 +155,14 @@ ls (void)
 }
 
 void
-date (void)
+date (char args[][256])
 {
+	// Check whether we got some arguments we shouldn't get
+	if (args[1][0] != 0) {
+		puts("invalid arguments");
+		return;
+	}
+	
 	time_t t = time(NULL);
 	gmtime(&t);
 	struct tm *currenttm = localtime(&t);
@@ -144,7 +178,7 @@ echo (char args[][256])
 {
 	int i = 1;
 	// If args[i][0] == 0 there's no more text to be echoed
-	while (args[i][0] != 0) {
+	while (args[i][0] != '\0') {
 		printf("%s ", args[i]);
 		i++;
 	}
@@ -169,7 +203,7 @@ removeNL(char* string)
 		if (string[i] == '\n')
 			string[i] = '\0';
 		
-		if (string[i] == '0')
+		if (string[i] == '\0')
 			return;
 		
 		i++;
