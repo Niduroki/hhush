@@ -13,7 +13,7 @@
 
 char *get_current_dir_name(void);
 int interpret (char* input);
-void cd (char* path);
+void cd (char args[][256]);
 void ls (char args[][256]);
 void date (char args[][256]);
 void echo (char args[][256]);
@@ -28,7 +28,9 @@ main()
 {
 	int run = 1;
 	while (run) {
-		printf("%s $ ", get_current_dir_name());
+		char *dir = get_current_dir_name();
+		printf("%s $ ", dir);
+		free(dir);
 		char input[256];
 		fgets(input, sizeof(input), stdin);
 		// TODO save the history into an array/struct here
@@ -47,19 +49,13 @@ main()
 int
 interpret (char* input)
 {
-	char* args = malloc(ARGSNUMBER*ARGSLENGTH*sizeof(char));
-	if (args == NULL) {
-		puts("ERROR: Couldn't allocate memory!");
-		return 1;
-	}
-	//char args[128][256];
+	char args[128][256];
 	
 	// Clean input
 	int j;
 	for (j=0; j<128; j++) {
-		*(args+sizeof(char)*j) = '\0';
+		args[j][0] = '\0';
 	}
-	
 
 	/* Split input */
 	char *token;
@@ -83,7 +79,7 @@ interpret (char* input)
 	removeNL(args[0]);
 
 	if (strcmp(args[0], "cd") == 0)
-		cd(args[1]);
+		cd(args);
 	else if (strcmp(args[0], "ls") == 0)
 		ls(args);
 	else if (strcmp(args[0], "date") == 0)
@@ -96,26 +92,25 @@ interpret (char* input)
 		puts("Print history here");
 	else if (strcmp(args[0], "exit") == 0)
 		return 1;
-	else if (strcmp(args[0], "\n") == 0)
+	else if (strcmp(args[0], "") == 0)
 		return 0;
 	else
-		return 0;//popen(args[0], "r");//return 0;
-		// TODO call the named program here - if there isn't a binary called like the named program print cnf
-	
-	// clean up
-	int k;
-	for (k=0; k<128; k++) {
-		free(args[k]);
-	}
-	//free(*args);
+		puts("command not found");
 	
 	return 0;
 }
 
 
 void
-cd (char* path)
+cd (char args[][256])
 {
+	// Check whether we got some arguments we shouldn't get or didn't get any arguments at all
+	if (args[2][0] != 0 || args[1][0] == 0) {
+		puts("invalid arguments");
+		return;
+	}
+
+	char* path = args[1];
 	int returncode;
 	removeNL(path);
 	returncode = chdir(path);
@@ -144,14 +139,16 @@ ls (char args[][256])
 	// https://stackoverflow.com/questions/612097/how-can-i-get-a-list-of-files-in-a-directory-using-c-or-c
 	DIR *dir;
 	struct dirent *ent;
-	if ((dir = opendir (get_current_dir_name())) != NULL) {
+	char* working_directory = get_current_dir_name();
+	if ((dir = opendir (working_directory)) != NULL) {
 		/* print all the files and directories within directory */
 		while ((ent = readdir (dir)) != NULL) {
 			if (ent->d_name[0] != '.')
 				printf ("%s\n", ent->d_name);
 		}
-	closedir (dir);
+		closedir (dir);
 	}
+	free(working_directory);
 }
 
 void
@@ -179,10 +176,18 @@ echo (char args[][256])
 	int i = 1;
 	// If args[i][0] == 0 there's no more text to be echoed
 	while (args[i][0] != '\0') {
-		printf("%s ", args[i]);
+		// After the first argument we need a space before every argument
+		if (i > 1) {
+			printf(" ");
+		}
+
+		printf("%s", args[i]);
 		i++;
 	}
-	printf("\n");
+
+	// I have to manually do a newline, if there's no text to echo
+	if (args[1][0] == '\0')
+		printf("\n");
 }
 
 void
