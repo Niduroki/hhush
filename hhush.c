@@ -1,9 +1,7 @@
 #include <dirent.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
-#include <signal.h>
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
@@ -11,34 +9,57 @@
 #define HHUBUFFERSIZE 4096
 
 char *get_current_dir_name(void);
+char *strdup(const char *s);
+
 int interpret (char* input);
 int do_interpret(char args[][256], char* buffer);
 void cd (char args[][256]);
 void ls (char args[][256], char* buffer);
 void date (char args[][256], char* buffer);
 void echo (char args[][256], char* buffer);
-void grep (char args[128][256], char* buffer, int piping);
-void history (char* args[][256], char* buffer);
+void grep (char args[][256], char* buffer, int piping);
+void history (char args[][256], char* buffer);
 void removeNL(char* string);
-int string_to_int(char* string);
 void split_string (char* string, char splitted[][256], char* delimiter);
+void tab_to_space (char* string);
 int search_file(char *regex, FILE *f, char* buffer);
 int search_text(char *regex, char *text);
+void add_to_history(char* entry);
+
+typedef struct {
+	int number;
+	char* entry;
+} history_entry;
+
+history_entry* history_array;
+int latest_history = 0;
+int max_history = 0;
 
 int
 main()
 {
 	int run = 1;
+	// TODO load history here
+	// If history loaded
+	if (1) {
+		// TODO set latest_history to something
+	}
 	while (run) {
 		char *dir = get_current_dir_name();
 		printf("%s $ ", dir);
 		free(dir);
 		char input[256];
 		fgets(input, sizeof(input), stdin);
-		// TODO save the history into an array/struct here
+		add_to_history(input);
 		int returncode = interpret(input);
 		if (returncode == 1) {
 			// We're supposed to exit, save the history
+			// TODO
+			int i;
+			for (i=0; i<latest_history; i++) {
+				free(history_array[i].entry);
+			}
+			free(history_array);
 			return 0;
 		}
 	}
@@ -56,6 +77,9 @@ interpret (char* input)
 	
 	// Clean input
 	buffer[0] = '\0';
+
+	// Tabs need be spaces
+	tab_to_space(input);
 
 	// Check if we are piping
 	char* pipe = strchr(input, '|');
@@ -137,7 +161,7 @@ do_interpret(char args[][256], char* buffer) {
 	else if (strcmp(args[0], "echo") == 0)
 		echo(args, buffer);
 	else if (strcmp(args[0], "history") == 0)
-		puts("Print history here");
+		history(args, buffer);
 	else if (strcmp(args[0], "exit") == 0)
 		return 1;
 	else if (strcmp(args[0], "") == 0)
@@ -237,7 +261,7 @@ echo (char args[][256], char* buffer)
 }
 
 void
-grep (char args[128][256], char* buffer, int piping)
+grep (char args[][256], char* buffer, int piping)
 {
 	// Check whether we got some arguments we shouldn't get or didn't get any arguments at all or got a third arg, but are piping, or did get a third arg, but aren't piping
 	if (args[3][0] != 0 || args[1][0] == 0 || (args[2][0] != 0 && piping) || (args[2][0] == 0 && !piping)) {
@@ -293,6 +317,51 @@ grep (char args[128][256], char* buffer, int piping)
 	}
 }
 
+void
+history (char args[][256], char* buffer)
+{
+	// Check whether we got some arguments we shouldn't get
+	if (args[2][0] != 0 || (args[1][0] == '-' && args[1][1] != 'c')) {
+		puts("invalid arguments");
+		return;
+	}
+
+	// Remove cheeky newlines
+	removeNL(args[1]);
+
+	int i;
+
+	if (args[1][0] == 0) {
+		for (i=0; i<latest_history; i++) {
+			char formatted[256];
+			sprintf(formatted, "%d %s", history_array[i].number, history_array[i].entry);
+			strcat(buffer, formatted);
+		}
+	} else if (strcmp(args[1], "-c") == 0) {
+		// free each entry individually to avoid leaks
+		for (i=0; i<latest_history; i++) {
+			free(history_array[i].entry);
+		}
+		free(history_array);
+		latest_history = 0;
+	} else {
+		int n = atoi(args[1]);
+
+		if (n <= 0) {
+			puts("invalid arguments");
+			return;
+		} else if (n > latest_history)
+			n = latest_history;
+
+		for (i=latest_history-n; i<latest_history; i++) {
+			char formatted[256];
+			sprintf(formatted, "%d %s", history_array[i].number, history_array[i].entry);
+			strcat(buffer, formatted);
+		}
+		// TODO find out what number we got and print as many entries
+	}
+}
+
 /**
  * Replaces a newline in a string/char array with a string terminating \0
  * Necessary, because splitting inserts a \n for whatever reason
@@ -308,12 +377,6 @@ removeNL(char* string)
 			return;
 		}
 	}
-}
-
-int
-string_to_int (char* string)
-{
-	return 1;
 }
 
 // Splits a string at given delimiter
@@ -334,6 +397,14 @@ split_string (char* string, char splitted[][256], char* delimiter)
 	}
 }
 
+void
+tab_to_space (char* string)
+{
+	char* tab;
+	while((tab = strchr(string, '\t')) != NULL) {
+		*tab = ' ';
+	}
+}
 
 // Search a file for a regex (or rather string)
 int
@@ -367,4 +438,34 @@ search_text(char *regex, char *text)
 		i++;
 	}
 	return 0;
+}
+
+void
+add_to_history(char* line)
+{
+	// Check if we need to realloc
+	if (latest_history == max_history) {
+		// Start with 10 entries, or add 10 entries
+		if (max_history == 0)
+			max_history = 10;
+		else
+			max_history += 10;
+
+		// Temporarily allocate a new history, to not lose the old one in case of OOM 
+		void *tmp = realloc(history_array, (max_history * sizeof(history_entry)));
+
+		if (tmp == NULL) {
+			puts("ERROR: Could not allocate memory!");
+			return;
+		}
+
+		// Things are looking good so far
+		history_array = (history_entry*)tmp;
+	}
+
+	// Malloc a new string, because line will change next time we type something
+	char* tmpline = strdup(line);
+	history_entry entry = {latest_history, tmpline};
+	history_array[latest_history] = entry;
+	latest_history++;
 }
