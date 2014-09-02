@@ -8,20 +8,18 @@
 #include <time.h>
 #include <stdlib.h>
 
-#define ARGSNUMBER 128
-#define ARGSLENGTH 256
-
 char *get_current_dir_name(void);
 int interpret (char* input);
 void cd (char args[][256]);
 void ls (char args[][256]);
 void date (char args[][256]);
-void echo (char args[][256]);
+char* echo (char args[][256]);
 void grep (char args[][256]);
 void history (char* arg);
-//int chararray_sizeof (char* arr);
 void removeNL(char* string);
 int string_to_int(char* string);
+int search_file(char *regex, FILE *f);
+int search_text(char *regex, char *text);
 
 int
 main()
@@ -116,13 +114,8 @@ cd (char args[][256])
 	returncode = chdir(path);
 	if (returncode == -1) {
 		int errcode = errno;
-		//char buffer[300];
-		if (errcode == ENOENT) {
-			/*strcpy(buffer, path);
-			strcat(buffer, " is not a directory\n");
-			printf(buffer);*/
+		if (errcode == ENOENT)
 			puts("no such file or directory");
-		}
 	}
 }
 
@@ -170,16 +163,18 @@ date (char args[][256])
 	}
 }
 
-void
+char*
 echo (char args[][256])
 {
+	// Buffer to return
+	char* buffer[256];
+	
 	int i = 1;
 	// If args[i][0] == 0 there's no more text to be echoed
 	while (args[i][0] != '\0') {
 		// After the first argument we need a space before every argument
-		if (i > 1) {
+		if (i > 1)
 			printf(" ");
-		}
 
 		printf("%s", args[i]);
 		i++;
@@ -193,7 +188,31 @@ echo (char args[][256])
 void
 grep (char args[][256])
 {
-	printf("Search %s for %s", args[2], args[1]);
+	// Check whether we got some arguments we shouldn't get or didn't get any arguments at all or got a third arg, but are piping, or did get a third arg, but aren't piping
+	// TODO check whether we are piping
+	int piping = 0;
+	if (args[3][0] != 0 || args[1][0] == 0 || (args[2][0] != 0 && piping) || (args[2][0] == 0 && !piping)) {
+		puts("invalid arguments");
+		return;
+	}
+	
+	if (piping) {
+		// TODO
+		search_file(args[1], stdin);
+	} else {
+		FILE *f;
+
+		// For whatever reason there's a newline
+		removeNL(args[2]);
+
+		f = fopen(args[2], "r");
+		if (f == NULL) {
+			puts("no such file or directory");
+			return;
+		}
+		search_file(args[1], f);
+		fclose(f);
+	}
 }
 
 /**
@@ -203,15 +222,13 @@ grep (char args[][256])
 void
 removeNL(char* string)
 {
-	int i = 0;
-	while (1) {
-		if (string[i] == '\n')
+	int i;
+	int n = strlen(string);
+	for (i=0; i<n; i++) {
+		if (string[i] == '\n') {
 			string[i] = '\0';
-		
-		if (string[i] == '\0')
 			return;
-		
-		i++;
+		}
 	}
 }
 
@@ -219,4 +236,39 @@ int
 string_to_int (char* string)
 {
 	return 1;
+}
+
+
+// Search a file for a regex (or rather string)
+int
+search_file(char *regex, FILE *f)
+{
+	//int n;
+	char buf[BUFSIZ];
+
+	while (fgets(buf, sizeof(buf), f) != NULL) {
+		//n = strlen(buf);
+		// Avoid printing newlines from the strings we've matched TODO
+		/*if (n > 0 && buf[n-1] == '\n')
+			buf[n-1] = '\0';*/
+		if (search_text(regex, buf))
+			printf("%s", buf);
+	}
+	return 0;
+}
+
+// Search a text for a regex (or rather string)
+int
+search_text(char *regex, char *text)
+{
+	int i = 0;
+	// Text to search is empty?
+	while (text[i] != 0) {
+		// Does regex match the current position?
+		if (strncmp(regex, &text[i], strlen(regex)) == 0)
+			return 1;
+		// Retry at the next character
+		i++;
+	}
+	return 0;
 }
