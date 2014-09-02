@@ -25,6 +25,8 @@ void tab_to_space (char* string);
 int search_file(char *regex, FILE *f, char* buffer);
 int search_text(char *regex, char *text);
 void add_to_history(char* entry);
+void read_history(void);
+void write_history(void);
 
 typedef struct {
 	int number;
@@ -39,11 +41,7 @@ int
 main()
 {
 	int run = 1;
-	// TODO load history here
-	// If history loaded
-	if (1) {
-		// TODO set latest_history to something
-	}
+	read_history();
 	while (run) {
 		char *dir = get_current_dir_name();
 		printf("%s $ ", dir);
@@ -53,13 +51,11 @@ main()
 		add_to_history(input);
 		int returncode = interpret(input);
 		if (returncode == 1) {
-			// We're supposed to exit, save the history
-			// TODO
+			write_history();
 			int i;
 			for (i=0; i<latest_history; i++) {
 				free(history_array[i].entry);
 			}
-			free(history_array);
 			return 0;
 		}
 	}
@@ -204,14 +200,12 @@ ls (char args[][256], char* buffer)
 		return;
 	}
 	
-	// TODO understand this :|
-	// https://stackoverflow.com/questions/612097/how-can-i-get-a-list-of-files-in-a-directory-using-c-or-c
 	DIR *dir;
 	struct dirent *ent;
 	char* working_directory = get_current_dir_name();
-	if ((dir = opendir (working_directory)) != NULL) {
-		/* print all the files and directories within directory */
-		while ((ent = readdir (dir)) != NULL) {
+	if ((dir = opendir(working_directory)) != NULL) {
+		// print all the files and directories within directory
+		while ((ent = readdir(dir)) != NULL) {
 			if (ent->d_name[0] != '.') {
 				strcat(buffer, ent->d_name);
 				strcat(buffer, "\n");
@@ -342,7 +336,6 @@ history (char args[][256], char* buffer)
 		for (i=0; i<latest_history; i++) {
 			free(history_array[i].entry);
 		}
-		free(history_array);
 		latest_history = 0;
 	} else {
 		int n = atoi(args[1]);
@@ -358,7 +351,6 @@ history (char args[][256], char* buffer)
 			sprintf(formatted, "%d %s", history_array[i].number, history_array[i].entry);
 			strcat(buffer, formatted);
 		}
-		// TODO find out what number we got and print as many entries
 	}
 }
 
@@ -410,14 +402,9 @@ tab_to_space (char* string)
 int
 search_file(char *regex, FILE *f, char* buffer)
 {
-	//int n;
 	char buf[BUFSIZ];
 
 	while (fgets(buf, sizeof(buf), f) != NULL) {
-		//n = strlen(buf);
-		// Avoid printing newlines from the strings we've matched TODO
-		/*if (n > 0 && buf[n-1] == '\n')
-			buf[n-1] = '\0';*/
 		if (search_text(regex, buf))
 			strcat(buffer, buf);
 	}
@@ -468,4 +455,40 @@ add_to_history(char* line)
 	history_entry entry = {latest_history, tmpline};
 	history_array[latest_history] = entry;
 	latest_history++;
+}
+
+void
+read_history ()
+{
+	FILE *f;
+	char buf[BUFSIZ];
+	int i;
+
+	f = fopen(".hhush.histfile", "r");
+
+	// No history file available
+	if (f == NULL) {
+		return;
+	}
+
+	while (fgets(buf, sizeof(buf), f) != NULL) {
+		add_to_history(buf);
+	}
+
+	fclose(f);
+}
+
+void
+write_history ()
+{
+	int i;
+	FILE* f;
+
+	f = fopen(".hhush.histfile", "w");
+
+	for (i=0; i<latest_history; i++) {
+		fputs(history_array[i].entry, f);
+	}
+
+	fclose(f);
 }
