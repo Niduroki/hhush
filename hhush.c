@@ -21,11 +21,12 @@ void grep (char args[][256], char* buffer, int piping);
 void history (char args[][256], char* buffer);
 void removeNL(char* string);
 void split_string (char* string, char splitted[][256], char* delimiter);
+void sanitize_string(char string[][256]);
 void tab_to_space (char* string);
 int search_file(char *regex, FILE *f, char* buffer);
 void add_to_history(char* entry);
 void read_history(void);
-void write_history(void);
+void write_history(char* dir);
 
 typedef struct {
 	int number;
@@ -39,6 +40,8 @@ int max_history = 0;
 int
 main()
 {
+	//puts("start");
+	char* starting_dir = get_current_dir_name();
 	read_history();
 	while (1) {
 		char *dir = get_current_dir_name();
@@ -49,11 +52,11 @@ main()
 		add_to_history(input);
 		int returncode = interpret(input);
 		if (returncode == 1) {
-			write_history();
+			write_history(starting_dir);
+			free(starting_dir);
 			int i;
-			for (i=0; i<latest_history; i++) {
+			for (i=0; i<latest_history; i++)
 				free(history_array[i].entry);
-			}
 			return 0;
 		}
 	}
@@ -66,6 +69,7 @@ main()
 int
 interpret (char* input)
 {
+	//puts("calling interpret");
 	int i, result;
 	char buffer[HHUBUFFERSIZE];
 	
@@ -98,7 +102,9 @@ interpret (char* input)
 		strcpy(firsthalf, input);
 
 		split_string(firsthalf, firstargs, " ");
+		sanitize_string(firstargs);
 		split_string(secondhalf, secondargs, " ");
+		sanitize_string(secondargs);
 
 		// Remove a stray newline
 		removeNL(firstargs[0]);
@@ -117,9 +123,8 @@ interpret (char* input)
 		result = do_interpret(firstargs, buffer);
 
 		// Nothing is in the buffer, thus we already printed an error message → return
-		if (buffer[0] == '\0') {
+		if (buffer[0] == '\0')
 			return 0;
-		}
 
 		grep(secondargs, buffer, piping);
 	} else {
@@ -130,6 +135,7 @@ interpret (char* input)
 			args[i][0] = '\0';
 
 		split_string(input, args, " ");
+		sanitize_string(args);
 
 		/* For whatever reason there'a stray newline */
 		removeNL(args[0]);
@@ -143,6 +149,7 @@ interpret (char* input)
 
 int
 do_interpret(char args[][256], char* buffer) {
+	//puts("calling do_interpret");
 	if (strcmp(args[0], "cd") == 0)
 		cd(args);
 	else if (strcmp(args[0], "ls") == 0)
@@ -160,10 +167,8 @@ do_interpret(char args[][256], char* buffer) {
 		return 1;
 	else if (strcmp(args[0], "") == 0)
 		return 0;
-	else {
+	else
 		puts("command not found");
-		return 0;
-	}
 
 	return 0;
 }
@@ -172,6 +177,9 @@ do_interpret(char args[][256], char* buffer) {
 void
 cd (char args[][256])
 {
+	//puts("calling cd");
+	//printf("Debugging output:\nargs[1] = %s\nargs[2] = %s\n(int)args[1][0] = %d\n(int)args[2][0] = %d\n", args[1], args[2], (int)args[1][0], (int)args[2][0]);
+
 	// Check whether we got some arguments we shouldn't get or didn't get any arguments at all
 	if (args[2][0] != 0 || args[1][0] == 0) {
 		puts("invalid arguments");
@@ -226,11 +234,10 @@ date (char args[][256], char* buffer)
 	time_t t = time(NULL);
 	gmtime(&t);
 	struct tm *currenttm = localtime(&t);
-	if (currenttm == NULL) {
+	if (currenttm == NULL)
 		strcat(buffer, "Error in date() function, tmptr is NULL");
-	} else {
+	else
 		strcat(buffer, asctime(currenttm));
-	}
 }
 
 void
@@ -331,9 +338,9 @@ history (char args[][256], char* buffer)
 		}
 	} else if (strcmp(args[1], "-c") == 0) {
 		// free each entry individually to avoid leaks
-		for (i=0; i<latest_history; i++) {
+		for (i=0; i<latest_history; i++)
 			free(history_array[i].entry);
-		}
+
 		latest_history = 0;
 	} else {
 		int n = atoi(args[1]);
@@ -382,13 +389,23 @@ split_string (char* string, char splitted[][256], char* delimiter)
 	}
 }
 
+// Makes all args that are just spaces into empty strings
+void
+sanitize_string(char string[][256])
+{
+	int i;
+	for (i=0; i<128; i++) {
+		if (string[i][0] == 10)
+			string[i][0] = '\0';
+	}
+}
+
 void
 tab_to_space (char* string)
 {
 	char* tab;
-	while((tab = strchr(string, '\t')) != NULL) {
+	while((tab = strchr(string, '\t')) != NULL)
 		*tab = ' ';
-	}
 }
 
 // Search a file for a regex (or rather string)
@@ -438,33 +455,33 @@ read_history ()
 {
 	FILE *f;
 	char buf[BUFSIZ];
-	int i;
 
 	f = fopen(".hhush.histfile", "r");
 
 	// No history file available
-	if (f == NULL) {
+	if (f == NULL)
 		return;
-	}
 
-	while (fgets(buf, sizeof(buf), f) != NULL) {
+	while (fgets(buf, sizeof(buf), f) != NULL)
 		add_to_history(buf);
-	}
 
 	fclose(f);
 }
 
 void
-write_history ()
+write_history (char* dir)
 {
 	int i;
 	FILE* f;
 
-	f = fopen(".hhush.histfile", "w");
+	char file[256];
+	strcpy(file, dir);
+	strcat(file, "/.hhush.histfile");
+	
+	f = fopen(file, "w");
 
-	for (i=0; i<latest_history; i++) {
+	for (i=0; i<latest_history; i++)
 		fputs(history_array[i].entry, f);
-	}
 
 	fclose(f);
 }
