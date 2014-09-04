@@ -23,7 +23,6 @@ void removeNL(char* string);
 void split_string (char* string, char splitted[][256], char* delimiter);
 void tab_to_space (char* string);
 int search_file(char *regex, FILE *f, char* buffer);
-int search_text(char *regex, char *text);
 void add_to_history(char* entry);
 void read_history(void);
 void write_history(void);
@@ -40,9 +39,8 @@ int max_history = 0;
 int
 main()
 {
-	int run = 1;
 	read_history();
-	while (run) {
+	while (1) {
 		char *dir = get_current_dir_name();
 		printf("%s $ ", dir);
 		free(dir);
@@ -63,7 +61,7 @@ main()
 }
 
 /*
- * Returns 0 for nothing interesting, -1 on error, 1 to exit
+ * Returns 0 for nothing interesting, 1 to exit
  */
 int
 interpret (char* input)
@@ -285,7 +283,7 @@ grep (char args[][256], char* buffer, int piping)
 		// While there's still lines to scan
 		while (splitted[i][0] != '\0') {
 			// If we got a hit append it to buffer with a \n
-			if (search_text(args[1], splitted[i])) {
+			if (strstr(splitted[i], args[1]) != NULL) {
 				strcat(buffer, splitted[i]);
 				strcat(buffer, "\n");
 			}
@@ -361,14 +359,9 @@ history (char args[][256], char* buffer)
 void
 removeNL(char* string)
 {
-	int i;
-	int n = strlen(string);
-	for (i=0; i<n; i++) {
-		if (string[i] == '\n') {
-			string[i] = '\0';
-			return;
-		}
-	}
+	char* newline = strchr(string, '\n');
+	if (newline != NULL)
+		*newline = '\0';
 }
 
 // Splits a string at given delimiter
@@ -405,24 +398,8 @@ search_file(char *regex, FILE *f, char* buffer)
 	char buf[BUFSIZ];
 
 	while (fgets(buf, sizeof(buf), f) != NULL) {
-		if (search_text(regex, buf))
+		if (strstr(buf, regex) != NULL)
 			strcat(buffer, buf);
-	}
-	return 0;
-}
-
-// Search a text for a regex (or rather string)
-int
-search_text(char *regex, char *text)
-{
-	int i = 0;
-	// Text to search is empty?
-	while (text[i] != 0) {
-		// Does regex match the current position?
-		if (strncmp(regex, &text[i], strlen(regex)) == 0)
-			return 1;
-		// Retry at the next character
-		i++;
 	}
 	return 0;
 }
@@ -446,7 +423,6 @@ add_to_history(char* line)
 			return;
 		}
 
-		// Things are looking good so far
 		history_array = (history_entry*)tmp;
 	}
 
