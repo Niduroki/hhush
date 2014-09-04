@@ -40,7 +40,6 @@ int max_history = 0;
 int
 main()
 {
-	//puts("start");
 	char* starting_dir = get_current_dir_name();
 	read_history();
 	while (1) {
@@ -69,7 +68,6 @@ main()
 int
 interpret (char* input)
 {
-	//puts("calling interpret");
 	int i, result;
 	char buffer[HHUBUFFERSIZE];
 	
@@ -149,7 +147,6 @@ interpret (char* input)
 
 int
 do_interpret(char args[][256], char* buffer) {
-	//puts("calling do_interpret");
 	if (strcmp(args[0], "cd") == 0)
 		cd(args);
 	else if (strcmp(args[0], "ls") == 0)
@@ -177,9 +174,6 @@ do_interpret(char args[][256], char* buffer) {
 void
 cd (char args[][256])
 {
-	//puts("calling cd");
-	//printf("Debugging output:\nargs[1] = %s\nargs[2] = %s\n(int)args[1][0] = %d\n(int)args[2][0] = %d\n", args[1], args[2], (int)args[1][0], (int)args[2][0]);
-
 	// Check whether we got some arguments we shouldn't get or didn't get any arguments at all
 	if (args[2][0] != 0 || args[1][0] == 0) {
 		puts("invalid arguments");
@@ -254,8 +248,8 @@ echo (char args[][256], char* buffer)
 		i++;
 	}
 
-	// I have to manually do a newline, if there's no text to echo
-	if (args[1][0] == '\0')
+	// We expect buffer now to have a newline, so we need to add it manually, if there's none
+	if (strchr(buffer, '\n') == NULL)
 		strcat(buffer, "\n");
 }
 
@@ -474,6 +468,7 @@ write_history (char* dir)
 	int i;
 	FILE* f;
 
+	// Compute the path we should save in
 	char file[256];
 	strcpy(file, dir);
 	strcat(file, "/.hhush.histfile");
