@@ -7,22 +7,19 @@
 #include <stdlib.h>
 
 #define HHUBUFFERSIZE 4096
+#define MAX_INPUT 256
 
-char *get_current_dir_name(void);
 char *strdup(const char *s);
 
 int interpret (char* input);
-int do_interpret(char args[][256], char* buffer);
-void cd (char args[][256]);
-void ls (char args[][256], char* buffer);
-void date (char args[][256], char* buffer);
-void echo (char args[][256], char* buffer);
-void grep (char args[][256], char* buffer, int piping);
-void history (char args[][256], char* buffer);
-void removeNL(char* string);
-void split_string (char* string, char splitted[][256], char* delimiter);
-void sanitize_string(char string[][256]);
-void tab_to_space (char* string);
+int do_interpret(char args[][MAX_INPUT], char* buffer);
+void cd (char args[][MAX_INPUT]);
+void ls (char args[][MAX_INPUT], char* buffer);
+void date (char args[][MAX_INPUT], char* buffer);
+void echo (char args[][MAX_INPUT], char* buffer);
+void grep (char args[][MAX_INPUT], char* buffer, int piping);
+void history (char args[][MAX_INPUT], char* buffer);
+void split_string (char* string, char splitted[][MAX_INPUT], char* delimiter);
 int search_file(char *regex, FILE *f, char* buffer);
 void add_to_history(char* entry);
 void read_history(void);
@@ -40,26 +37,30 @@ int max_history = 0;
 int
 main()
 {
-	char* starting_dir = get_current_dir_name();
+	// Needed for saving history in the starting directory
+	char starting_dir[MAX_INPUT];
+	getcwd(starting_dir, MAX_INPUT);
+
 	read_history();
 	while (1) {
-		char *dir = get_current_dir_name();
-		printf("%s $ ", dir);
-		free(dir);
-		char input[256];
+		char dir[MAX_INPUT];
+		printf("%s $ ", getcwd(dir, MAX_INPUT));
+
+		char input[MAX_INPUT];
 		fgets(input, sizeof(input), stdin);
 		add_to_history(input);
 		int returncode = interpret(input);
+
 		if (returncode == 1) {
 			write_history(starting_dir);
-			free(starting_dir);
+
+			// Clean up
 			int i;
 			for (i=0; i<latest_history; i++)
 				free(history_array[i].entry);
 			return 0;
 		}
 	}
-	return 0;
 }
 
 /*
@@ -68,75 +69,69 @@ main()
 int
 interpret (char* input)
 {
-	int i, result;
+	char *newline, *tab, *pipe;
+	int i, result, piping;
 	char buffer[HHUBUFFERSIZE];
+
+	// Remove the newline from input
+	newline = strchr(input, '\n');
+	*newline = '\0';
 	
 	// Clean input
 	buffer[0] = '\0';
 
 	// Tabs need be spaces
-	tab_to_space(input);
+	while((tab = strchr(input, '\t')) != NULL)
+		*tab = ' ';
 
 	// Check if we are piping
-	char* pipe = strchr(input, '|');
-	int piping = pipe != NULL;
+	pipe = strchr(input, '|');
+	piping = pipe != NULL;
 
 	if (piping) {
-		char firsthalf[256];
-		char secondhalf[256];
-		char firstargs[128][256];
-		char secondargs[128][256];
+		char parts[2][MAX_INPUT];
+		char args[2][128][MAX_INPUT];
 
 		// Clear args
 		for (i=0; i<128; i++) {
-			firstargs[i][0] = '\0';
-			secondargs[i][0] = '\0';
+			args[0][i][0] = '\0';
+			args[1][i][0] = '\0';
 		}
 
-		// Copy everything 2 chars after the pipe (to skip both pipe and the space) into secondhalf
-		strcpy(secondhalf, pipe+2*sizeof(char));
-		// Make pipe zero now and copy the modified input into firsthalf
+		// Copy everything 2 chars after the pipe (to skip both pipe and the space) into the second part
+		strcpy(parts[1], pipe+2*sizeof(char));
+		// Make pipe zero now and copy the modified input into the first part
 		*pipe = '\0';
-		strcpy(firsthalf, input);
+		strcpy(parts[0], input);
 
-		split_string(firsthalf, firstargs, " ");
-		sanitize_string(firstargs);
-		split_string(secondhalf, secondargs, " ");
-		sanitize_string(secondargs);
-
-		// Remove a stray newline
-		removeNL(firstargs[0]);
-		removeNL(secondargs[0]);
+		split_string(parts[0], args[0], " ");
+		split_string(parts[1], args[1], " ");
 
 		// cd somewhere | grep blarp does not work – Neither does anything other then grep after the pipe
-		if ((strcmp(firstargs[0], "cd") == 0)) {
+		if ((strcmp(args[0][0], "cd") == 0)) {
 			puts("invalid arguments");
 			return 0;
 		}
-		if  (strcmp(secondargs[0], "grep") != 0) {
+		if  (strcmp(args[1][0], "grep") != 0) {
 			puts("command not found");
 			return 0;
 		}
 
-		result = do_interpret(firstargs, buffer);
+		result = do_interpret(args[0], buffer);
 
-		// Nothing is in the buffer, thus we already printed an error message → return
+		// If the buffer is empty we already printed an error message -> return
 		if (buffer[0] == '\0')
 			return 0;
 
-		grep(secondargs, buffer, piping);
+		grep(args[1], buffer, piping);
 	} else {
-		char args[128][256];
+		char args[128][MAX_INPUT];
 
 		// Clear args
 		for (i=0; i<128; i++)
 			args[i][0] = '\0';
 
 		split_string(input, args, " ");
-		sanitize_string(args);
-
-		/* For whatever reason there'a stray newline */
-		removeNL(args[0]);
 
 		result = do_interpret(args, buffer);
 	}
@@ -146,7 +141,7 @@ interpret (char* input)
 }
 
 int
-do_interpret(char args[][256], char* buffer) {
+do_interpret(char args[][MAX_INPUT], char* buffer) {
 	if (strcmp(args[0], "cd") == 0)
 		cd(args);
 	else if (strcmp(args[0], "ls") == 0)
@@ -172,7 +167,7 @@ do_interpret(char args[][256], char* buffer) {
 
 
 void
-cd (char args[][256])
+cd (char args[][MAX_INPUT])
 {
 	// Check whether we got some arguments we shouldn't get or didn't get any arguments at all
 	if (args[2][0] != 0 || args[1][0] == 0) {
@@ -182,7 +177,6 @@ cd (char args[][256])
 
 	char* path = args[1];
 	int returncode;
-	removeNL(path);
 	returncode = chdir(path);
 	if (returncode == -1) {
 		int errcode = errno;
@@ -192,7 +186,7 @@ cd (char args[][256])
 }
 
 void
-ls (char args[][256], char* buffer)
+ls (char args[][MAX_INPUT], char* buffer)
 {
 	// Check whether we got some arguments we shouldn't get
 	if (args[1][0] != 0) {
@@ -202,9 +196,10 @@ ls (char args[][256], char* buffer)
 	
 	DIR *dir;
 	struct dirent *ent;
-	char* working_directory = get_current_dir_name();
-	if ((dir = opendir(working_directory)) != NULL) {
-		// print all the files and directories within directory
+	char working_directory[MAX_INPUT];
+	// Open working directory
+	if ((dir = opendir(getcwd(working_directory, MAX_INPUT))) != NULL) {
+		// Print all the files in the working directory
 		while ((ent = readdir(dir)) != NULL) {
 			if (ent->d_name[0] != '.') {
 				strcat(buffer, ent->d_name);
@@ -213,11 +208,10 @@ ls (char args[][256], char* buffer)
 		}
 		closedir (dir);
 	}
-	free(working_directory);
 }
 
 void
-date (char args[][256], char* buffer)
+date (char args[][MAX_INPUT], char* buffer)
 {
 	// Check whether we got some arguments we shouldn't get
 	if (args[1][0] != 0) {
@@ -229,13 +223,13 @@ date (char args[][256], char* buffer)
 	gmtime(&t);
 	struct tm *currenttm = localtime(&t);
 	if (currenttm == NULL)
-		strcat(buffer, "Error in date() function, tmptr is NULL");
+		buffer = "Error in date() function, tmptr is NULL";
 	else
-		strcat(buffer, asctime(currenttm));
+		strcpy(buffer, asctime(currenttm));
 }
 
 void
-echo (char args[][256], char* buffer)
+echo (char args[][MAX_INPUT], char* buffer)
 {
 	int i = 1;
 	// If args[i][0] == 0 there's no more text to be echoed
@@ -254,9 +248,11 @@ echo (char args[][256], char* buffer)
 }
 
 void
-grep (char args[][256], char* buffer, int piping)
+grep (char args[][MAX_INPUT], char* buffer, int piping)
 {
-	// Check whether we got some arguments we shouldn't get or didn't get any arguments at all or got a third arg, but are piping, or did get a third arg, but aren't piping
+	/* Check whether we got some arguments we shouldn't get or didn't get any arguments at all
+	 * or got a third arg, but are piping, or did get a third arg, but aren't piping
+	 */
 	if (args[3][0] != 0 || args[1][0] == 0 || (args[2][0] != 0 && piping) || (args[2][0] == 0 && !piping)) {
 		puts("invalid arguments");
 		// Reset the buffer, for the case we are piping, and are supposed to do something with it, but can't do so, because of invalid args
@@ -267,8 +263,6 @@ grep (char args[][256], char* buffer, int piping)
 	if (piping) {
 		int i;
 
-		// Remove a sneaky newline
-		removeNL(args[1]);
 		// We're piping, thus buffer has the output of whatever happened before the pipe – we need to split that at newlines now
 		char splitted[256][256];
 		// Initialize
@@ -297,9 +291,6 @@ grep (char args[][256], char* buffer, int piping)
 	} else {
 		FILE *f;
 
-		// For whatever reason there's a newline
-		removeNL(args[2]);
-
 		f = fopen(args[2], "r");
 		if (f == NULL) {
 			puts("no such file or directory");
@@ -311,7 +302,7 @@ grep (char args[][256], char* buffer, int piping)
 }
 
 void
-history (char args[][256], char* buffer)
+history (char args[][MAX_INPUT], char* buffer)
 {
 	// Check whether we got some arguments we shouldn't get
 	if (args[2][0] != 0 || (args[1][0] == '-' && args[1][1] != 'c')) {
@@ -319,23 +310,19 @@ history (char args[][256], char* buffer)
 		return;
 	}
 
-	// Remove cheeky newlines
-	removeNL(args[1]);
-
 	int i;
 
-	if (args[1][0] == 0) {
-		for (i=0; i<latest_history; i++) {
-			char formatted[256];
-			sprintf(formatted, "%d %s", history_array[i].number, history_array[i].entry);
-			strcat(buffer, formatted);
-		}
-	} else if (strcmp(args[1], "-c") == 0) {
+	if (args[1][0] == 0)
+		// Start at entry 0
+		i = 0;
+	else if (strcmp(args[1], "-c") == 0) {
 		// free each entry individually to avoid leaks
 		for (i=0; i<latest_history; i++)
 			free(history_array[i].entry);
 
 		latest_history = 0;
+		// Don't print any history
+		return;
 	} else {
 		int n = atoi(args[1]);
 
@@ -345,61 +332,36 @@ history (char args[][256], char* buffer)
 		} else if (n > latest_history)
 			n = latest_history;
 
-		for (i=latest_history-n; i<latest_history; i++) {
-			char formatted[256];
-			sprintf(formatted, "%d %s", history_array[i].number, history_array[i].entry);
-			strcat(buffer, formatted);
-		}
+		i = latest_history-n;
 	}
-}
 
-/**
- * Replaces a newline in a string/char array with a string terminating \0
- * Necessary, because splitting inserts a \n for whatever reason
- */
-void
-removeNL(char* string)
-{
-	char* newline = strchr(string, '\n');
-	if (newline != NULL)
-		*newline = '\0';
+	while (i<latest_history) {
+		char formatted[MAX_INPUT];
+		sprintf(formatted, "%d %s", history_array[i].number, history_array[i].entry);
+		strcat(buffer, formatted);
+		i++;
+	}
 }
 
 // Splits a string at given delimiter
 void
-split_string (char* string, char splitted[][256], char* delimiter)
+split_string (char* string, char splitted[][MAX_INPUT], char* delimiter)
 {
 	char *token;
 
 	token = strtok(string, delimiter);
+
+	// If we didn't even find one delimiter quit now
+	if (token == NULL)
+		return;
+
 	strcpy(splitted[0], token);
 
 	int i = 1;
-	token = strtok(NULL, delimiter);
-	while (token != NULL) {
+	while ((token = strtok(NULL, delimiter)) != NULL) {
 		strcpy(splitted[i], token);
 		i++;
-		token = strtok(NULL, delimiter);
 	}
-}
-
-// Makes all args that are just spaces into empty strings
-void
-sanitize_string(char string[][256])
-{
-	int i;
-	for (i=0; i<128; i++) {
-		if (string[i][0] == 10)
-			string[i][0] = '\0';
-	}
-}
-
-void
-tab_to_space (char* string)
-{
-	char* tab;
-	while((tab = strchr(string, '\t')) != NULL)
-		*tab = ' ';
 }
 
 // Search a file for a regex (or rather string)
@@ -452,14 +414,13 @@ read_history ()
 
 	f = fopen(".hhush.histfile", "r");
 
-	// No history file available
-	if (f == NULL)
-		return;
+	// Check if a history file is available
+	if (f != NULL) {
+		while (fgets(buf, sizeof(buf), f) != NULL)
+			add_to_history(buf);
 
-	while (fgets(buf, sizeof(buf), f) != NULL)
-		add_to_history(buf);
-
-	fclose(f);
+		fclose(f);
+	}
 }
 
 void
@@ -467,11 +428,10 @@ write_history (char* dir)
 {
 	int i;
 	FILE* f;
+	char file[MAX_INPUT];
 
 	// Compute the path we should save in
-	char file[256];
-	strcpy(file, dir);
-	strcat(file, "/.hhush.histfile");
+	sprintf(file, "%s/.hhush.histfile", dir);
 	
 	f = fopen(file, "w");
 
